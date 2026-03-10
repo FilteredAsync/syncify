@@ -26,9 +26,12 @@ const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID
 const SERVICE_ACCOUNT_PATH = path.join(__dirname, "service-account.json")
 
 if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-  fs.writeFileSync(SERVICE_ACCOUNT_PATH, process.env.GOOGLE_SERVICE_ACCOUNT_JSON, "utf8")
+  fs.writeFileSync(
+    SERVICE_ACCOUNT_PATH,
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+    "utf8"
+  )
 }
-
 // -------------------- Directories --------------------
 const CACHE_DIR = path.join(__dirname, "cache")
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true })
