@@ -23,11 +23,14 @@ const Database = require("better-sqlite3")
 // -------------------- Config --------------------
 const PORT = Number(process.env.PORT || 3000)
 const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID
-const KEYFILE = process.env.GOOGLE_APPLICATION_CREDENTIALS || "./service-account.json"
+const keyFilePath = "./service-account.json"
 
-if (!DRIVE_FOLDER_ID) {
-  console.error("Missing DRIVE_FOLDER_ID in .env")
-  process.exit(1)
+if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+  const fs = require("fs")
+  fs.writeFileSync(
+    keyFilePath,
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  )
 }
 
 // -------------------- Directories --------------------
@@ -64,7 +67,7 @@ db.prepare(`CREATE INDEX IF NOT EXISTS idx_tracks_albumArtist ON tracks(albumArt
 
 // -------------------- Drive Client --------------------
 const auth = new google.auth.GoogleAuth({
-  keyFile: KEYFILE,
+  keyFile: "./service-account.json",
   scopes: ["https://www.googleapis.com/auth/drive.readonly"],
 })
 
