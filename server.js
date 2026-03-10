@@ -311,6 +311,10 @@ app.use(cors({
 }))
 app.use(express.json())
 
+app.get("/", (req, res) => {
+  res.send("Syncify API running")
+})
+
 app.get("/health", (req, res) => res.json({ok: true}))
 
 // Flat library (safe fields only)
