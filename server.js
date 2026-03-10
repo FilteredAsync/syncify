@@ -31,6 +31,9 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
     "utf8"
   )
+  console.log("Wrote service account JSON to:", SERVICE_ACCOUNT_PATH)
+} else {
+  console.log("GOOGLE_SERVICE_ACCOUNT_JSON is missing")
 }
 // -------------------- Directories --------------------
 const CACHE_DIR = path.join(__dirname, "cache")
