@@ -301,7 +301,7 @@ const app = express()
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://your-project-name.vercel.app"
+    "https://syncify-lac.vercel.app"
   ]
 }))
 app.use(express.json())
