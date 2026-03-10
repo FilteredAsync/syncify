@@ -1,0 +1,7 @@
+node_modules
+.env
+service-account.json
+library.db
+cache
+covers
+syncify-ui/node_modules
