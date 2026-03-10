@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import "./styles.css"
 
 // If you ever change your server port, update this.
-const API = "http://localhost:3000"
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000"
 
 function fmtTime(sec) {
   const s = Math.max(0, Math.floor(sec || 0))
