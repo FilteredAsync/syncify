@@ -31,6 +31,9 @@ export default function PlaybackBar() {
   return (
     <footer className="playbackBar">
       <div className="pbNow">
+        {current?.coverUrl && (
+            <img className="pbCover" src={`${API}${current.coverUrl}`} alt="" />
+        )}
         {current ? (
           <>
             <div className="pbMeta">

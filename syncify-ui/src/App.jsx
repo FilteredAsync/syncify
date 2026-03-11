@@ -57,6 +57,11 @@ async function fetchJson(url) {
   return res.json()
 }
 
+const backgroundCover =
+  view.kind === "album" && albumData?.coverUrl
+    ? `${API}${albumData.coverUrl}`
+    : ""
+
 function SyncifyApp() {
   const [albums, setAlbums] = useState([])
   const [loadingAlbums, setLoadingAlbums] = useState(true)
@@ -188,6 +193,21 @@ function SyncifyApp() {
 
   return (
     <div className="appShell">
+      <div
+        className="appBackdrop"
+        style={
+          backgroundCover
+            ? {
+                backgroundImage: `
+                  linear-gradient(rgba(9,13,20,0.72), rgba(9,13,20,0.94)),
+                  url(${backgroundCover})
+                `,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      />
       <div className="app">
         <header className="topbar">
           <div className="brand" onClick={goHome} style={{ cursor: "pointer" }}>
