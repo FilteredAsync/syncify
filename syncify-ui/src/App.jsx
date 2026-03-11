@@ -1,9 +1,42 @@
-// syncify-ui/src/App.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
+import { PlayerProvider, usePlayer } from "./player/PlayerProvider"
+import PlaybackBar from "./components/PlaybackBar"
+import QueuePanel from "./components/QueuePanel"
 import "./styles.css"
 
-// If you ever change your server port, update this.
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000"
+
+function Cover({ artist, album, coverUrl, className = "" }) {
+  const safeArtist = (artist || "").trim()
+  const safeAlbum = (album || "").trim()
+
+  const isUnknown =
+    !safeArtist ||
+    !safeAlbum ||
+    safeArtist === "Unknown Artist" ||
+    safeAlbum === "Unknown Album"
+
+  if (isUnknown) {
+    return <div className={`coverBox ${className}`} />
+  }
+
+  const src = coverUrl
+    ? `${API}${coverUrl}`
+    : `${API}/cover?artist=${encodeURIComponent(safeArtist)}&album=${encodeURIComponent(safeAlbum)}`
+
+  return (
+    <div className={`coverBox ${className}`}>
+      <img
+        className="coverImg"
+        src={src}
+        alt={`${safeAlbum} cover`}
+        onError={(e) => {
+          e.currentTarget.style.display = "none"
+        }}
+      />
+    </div>
+  )
+}
 
 function fmtTime(sec) {
   const s = Math.max(0, Math.floor(sec || 0))
@@ -15,87 +48,65 @@ function fmtTime(sec) {
 async function fetchJson(url) {
   const res = await fetch(url)
   const ct = res.headers.get("content-type") || ""
-  // Guard against accidentally trying to parse images/html as JSON
+
   if (!ct.includes("application/json")) {
     const text = await res.text().catch(() => "")
-    throw new Error(`Expected JSON from ${url}, got ${ct}. Body starts: ${text.slice(0, 40)}`)
+    throw new Error(`Expected JSON from ${url}, got ${ct}. Body starts: ${text.slice(0, 60)}`)
   }
+
   return res.json()
 }
 
-function Cover({ artist, album, coverUrl, className = "" }) {
-  // coverUrl is returned by server as "/cover?artist=...&album=..."
-  // We can use it directly.
-  const src = coverUrl ? `${API}${coverUrl}` : `${API}/cover?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`
-
-  return (
-    <div className={`coverBox ${className}`}>
-      <img
-        className="coverImg"
-        src={src}
-        alt={`${album} cover`}
-        onError={(e) => {
-          e.currentTarget.style.display = "none"
-        }}
-      />
-    </div>
-  )
-}
-
-export default function App() {
-  // Global library
+function SyncifyApp() {
   const [albums, setAlbums] = useState([])
   const [loadingAlbums, setLoadingAlbums] = useState(true)
   const [albumsError, setAlbumsError] = useState("")
 
-  // Search
   const [query, setQuery] = useState("")
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchTracks, setSearchTracks] = useState([])
   const [searchAlbums, setSearchAlbums] = useState([])
 
-  // “Routing” state
-  // view = { kind: "home" } or { kind: "album", artist, album }
   const [view, setView] = useState({ kind: "home" })
-
-  // Album detail state
   const [albumLoading, setAlbumLoading] = useState(false)
   const [albumData, setAlbumData] = useState(null)
   const [albumError, setAlbumError] = useState("")
 
-  // Player
-  const audioRef = useRef(null)
-  const [currentTrack, setCurrentTrack] = useState(null) // { id, title/name, artist, album, duration }
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [progress, setProgress] = useState(0) // seconds
-  const [duration, setDuration] = useState(0) // seconds
+  const [queueOpen, setQueueOpen] = useState(true)
 
-  // -------------------- Load Albums --------------------
+  const { playTrack, addToQueue, playNextNow } = usePlayer()
+
   useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       setLoadingAlbums(true)
       setAlbumsError("")
+
       try {
         const data = await fetchJson(`${API}/albums`)
-        if (!cancelled) setAlbums(Array.isArray(data) ? data : [])
-      } catch (e) {
-        console.error(e)
+        if (!cancelled) {
+          setAlbums(Array.isArray(data) ? data : [])
+        }
+      } catch (err) {
+        console.error(err)
         if (!cancelled) {
           setAlbums([])
-          setAlbumsError(String(e?.message || e))
+          setAlbumsError(String(err?.message || err))
         }
       } finally {
-        if (!cancelled) setLoadingAlbums(false)
+        if (!cancelled) {
+          setLoadingAlbums(false)
+        }
       }
     })()
+
     return () => {
       cancelled = true
     }
   }, [])
 
-  // -------------------- Search --------------------
   useEffect(() => {
     if (!query.trim()) {
       setSearchTracks([])
@@ -105,21 +116,26 @@ export default function App() {
     }
 
     let cancelled = false
+
     const t = setTimeout(async () => {
       setSearchLoading(true)
+
       try {
         const data = await fetchJson(`${API}/search?q=${encodeURIComponent(query.trim())}`)
         if (cancelled) return
+
         setSearchTracks(Array.isArray(data?.tracks) ? data.tracks : [])
         setSearchAlbums(Array.isArray(data?.albums) ? data.albums : [])
-      } catch (e) {
-        console.error(e)
+      } catch (err) {
+        console.error(err)
         if (!cancelled) {
           setSearchTracks([])
           setSearchAlbums([])
         }
       } finally {
-        if (!cancelled) setSearchLoading(false)
+        if (!cancelled) {
+          setSearchLoading(false)
+        }
       }
     }, 180)
 
@@ -129,7 +145,6 @@ export default function App() {
     }
   }, [query])
 
-  // -------------------- Album Open --------------------
   async function openAlbum(artist, album) {
     setView({ kind: "album", artist, album })
     setAlbumLoading(true)
@@ -137,14 +152,13 @@ export default function App() {
     setAlbumError("")
 
     try {
-      // IMPORTANT: this is the JSON endpoint (NOT coverUrl)
       const data = await fetchJson(
         `${API}/album?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`
       )
       setAlbumData(data)
-    } catch (e) {
-      console.error(e)
-      setAlbumError(String(e?.message || e))
+    } catch (err) {
+      console.error(err)
+      setAlbumError(String(err?.message || err))
     } finally {
       setAlbumLoading(false)
     }
@@ -157,283 +171,274 @@ export default function App() {
     setAlbumLoading(false)
   }
 
-  // -------------------- Player --------------------
-  function playTrack(track) {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const id = track.id
-    audio.src = `${API}/stream/${id}`
-    audio.play().then(() => setIsPlaying(true)).catch((e) => {
-      console.error("play() failed:", e)
-      setIsPlaying(false)
-    })
-
-    setCurrentTrack({
-      id,
-      title: track.title || track.name || "Unknown Title",
-      artist: track.artist || "Unknown Artist",
-      album: track.album || "Unknown Album",
-      duration: track.duration || 0,
-    })
-  }
-
-  function togglePlay() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (!audio.src) return
-
-    if (audio.paused) {
-      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
-    } else {
-      audio.pause()
-      setIsPlaying(false)
-    }
-  }
-
-  function seekTo(seconds) {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.currentTime = Math.max(0, Math.min(seconds, audio.duration || seconds))
-    setProgress(audio.currentTime)
-  }
-
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const onTime = () => setProgress(audio.currentTime || 0)
-    const onDur = () => setDuration(audio.duration || 0)
-    const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
-
-    audio.addEventListener("timeupdate", onTime)
-    audio.addEventListener("durationchange", onDur)
-    audio.addEventListener("play", onPlay)
-    audio.addEventListener("pause", onPause)
-
-    return () => {
-      audio.removeEventListener("timeupdate", onTime)
-      audio.removeEventListener("durationchange", onDur)
-      audio.removeEventListener("play", onPlay)
-      audio.removeEventListener("pause", onPause)
-    }
-  }, [])
-
   const albumGrid = useMemo(() => {
     return Array.isArray(albums) ? albums : []
   }, [albums])
 
+  function makeAlbumContextTracks(data) {
+    return (data?.tracks || []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      artist: data.artist,
+      album: data.album,
+      duration: t.duration,
+      trackNo: t.trackNo || 0,
+    }))
+  }
+
   return (
-    <div className="app">
-      <audio ref={audioRef} />
+    <div className="appShell">
+      <div className="app">
+        <header className="topbar">
+          <div className="brand" onClick={goHome} style={{ cursor: "pointer" }}>
+            Syncify
+          </div>
 
-      {/* Top bar */}
-      <header className="topbar">
-        <div className="brand" onClick={goHome} style={{ cursor: "pointer" }}>
-          Syncify
-        </div>
+          <div className="searchWrap">
+            <input
+              className="search"
+              placeholder="Search songs, artists, albums..."
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setSearchOpen(true)
+              }}
+              onFocus={() => setSearchOpen(true)}
+            />
 
-        <div className="searchWrap">
-          <input
-            className="search"
-            placeholder="Search songs, artists, albums..."
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setSearchOpen(true)
-            }}
-            onFocus={() => setSearchOpen(true)}
-          />
+            {searchOpen && query.trim().length > 0 && (
+              <div className="searchPanel" onMouseDown={(e) => e.preventDefault()}>
+                {searchLoading && <div className="searchEmpty">Searching…</div>}
 
-          {searchOpen && query.trim().length > 0 && (
-            <div className="searchPanel" onMouseDown={(e) => e.preventDefault()}>
-              {searchLoading && <div className="searchEmpty">Searching…</div>}
+                {!searchLoading && searchAlbums.length === 0 && searchTracks.length === 0 && (
+                  <div className="searchEmpty">No results.</div>
+                )}
 
-              {!searchLoading && searchAlbums.length === 0 && searchTracks.length === 0 && (
-                <div className="searchEmpty">No results.</div>
-              )}
+                {searchAlbums.length > 0 && (
+                  <div className="searchSection">
+                    <div className="searchSectionTitle">Albums</div>
 
-              {searchAlbums.length > 0 && (
-                <div className="searchSection">
-                  <div className="searchSectionTitle">Albums</div>
-                  <div className="searchList">
-                    {searchAlbums.map((a) => (
+                    <div className="searchList">
+                      {searchAlbums.map((a) => (
+                        <button
+                          key={a.albumId}
+                          className="searchRow"
+                          onClick={() => {
+                            setSearchOpen(false)
+                            openAlbum(a.artist, a.album)
+                          }}
+                        >
+                          <div className="searchCover">
+                            <Cover artist={a.artist} album={a.album} coverUrl={a.coverUrl} />
+                          </div>
+
+                          <div className="searchMeta">
+                            <div className="searchTitle">{a.album}</div>
+                            <div className="searchSub">{a.artist}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {searchTracks.length > 0 && (
+                  <div className="searchSection">
+                    <div className="searchSectionTitle">Songs</div>
+
+                    <div className="searchList">
+                      {searchTracks.map((t) => (
+                        <button
+                          key={t.id}
+                          className="searchRow"
+                          onClick={() => {
+                            setSearchOpen(false)
+                            playTrack({
+                              id: t.id,
+                              title: t.name,
+                              artist: t.artist,
+                              album: t.album,
+                              duration: t.duration,
+                            })
+                          }}
+                        >
+                          <div className="searchMeta" style={{ paddingLeft: 6 }}>
+                            <div className="searchTitle">{t.name}</div>
+                            <div className="searchSub">
+                              {t.artist} • {t.album}
+                            </div>
+                          </div>
+
+                          <div className="searchRight">{fmtTime(t.duration)}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button className="queueToggleBtn" onClick={() => setQueueOpen((v) => !v)}>
+            {queueOpen ? "Hide Queue" : "Show Queue"}
+          </button>
+        </header>
+
+        <div className="layout">
+          <main className="main">
+            {view.kind === "home" && (
+              <>
+                <div className="sectionTitle">Albums</div>
+
+                {loadingAlbums && <div className="muted">Loading…</div>}
+                {!loadingAlbums && albumsError && <div className="muted">Error: {albumsError}</div>}
+
+                {!loadingAlbums && !albumsError && (
+                  <div className="grid">
+                    {albumGrid.map((a) => (
                       <button
                         key={a.albumId}
-                        className="searchRow"
-                        onClick={() => {
-                          setSearchOpen(false)
-                          openAlbum(a.artist, a.album)
-                        }}
+                        className="card"
+                        onClick={() => openAlbum(a.artist, a.album)}
                       >
-                        <div className="searchCover">
-                          <Cover artist={a.artist} album={a.album} coverUrl={a.coverUrl} />
-                        </div>
-                        <div className="searchMeta">
-                          <div className="searchTitle">{a.album}</div>
-                          <div className="searchSub">{a.artist}</div>
-                        </div>
+                        <Cover artist={a.artist} album={a.album} coverUrl={a.coverUrl} />
+                        <div className="cardTitle">{a.album}</div>
+                        <div className="cardSub">{a.artist}</div>
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </>
+            )}
 
-              {searchTracks.length > 0 && (
-                <div className="searchSection">
-                  <div className="searchSectionTitle">Songs</div>
-                  <div className="searchList">
-                    {searchTracks.map((t) => (
-                      <button
-                        key={t.id}
-                        className="searchRow"
-                        onClick={() => {
-                          setSearchOpen(false)
-                          playTrack(t)
-                        }}
-                      >
-                        <div className="searchMeta" style={{ paddingLeft: 6 }}>
-                          <div className="searchTitle">{t.name}</div>
-                          <div className="searchSub">
-                            {t.artist} • {t.album}
+            {view.kind === "album" && (
+              <>
+                <div className="albumTop">
+                  <button className="backBtn" onClick={goHome}>
+                    ← Back
+                  </button>
+
+                  {albumLoading && <div className="muted">Loading album…</div>}
+
+                  {!albumLoading && albumError && (
+                    <div className="muted">Album error: {albumError}</div>
+                  )}
+
+                  {!albumLoading && albumData && (
+                    <>
+                      <div className="albumHeader">
+                        <div className="albumCoverLg">
+                          <Cover
+                            artist={albumData.artist}
+                            album={albumData.album}
+                            coverUrl={albumData.coverUrl}
+                            className="coverLg"
+                          />
+                        </div>
+
+                        <div className="albumMeta">
+                          <div className="albumLabel">Album</div>
+                          <div className="albumName">{albumData.album}</div>
+                          <div className="albumArtist">{albumData.artist}</div>
+                          <div className="albumCounts">
+                            {albumData.tracks?.length || 0} songs
+                          </div>
+
+                          <div className="albumActions">
+                            <button
+                              className="primaryBtn"
+                              onClick={() => {
+                                const contextTracks = makeAlbumContextTracks(albumData)
+                                if (contextTracks.length === 0) return
+
+                                playTrack(contextTracks[0], {
+                                  context: contextTracks,
+                                  index: 0,
+                                })
+                              }}
+                            >
+                              Play Album
+                            </button>
                           </div>
                         </div>
-                        <div className="searchRight">{fmtTime(t.duration)}</div>
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+
+                      <div className="trackList">
+                        {(albumData.tracks || []).map((t, idx) => {
+                          const contextTracks = makeAlbumContextTracks(albumData)
+
+                          const track = {
+                            id: t.id,
+                            title: t.title,
+                            artist: albumData.artist,
+                            album: albumData.album,
+                            duration: t.duration,
+                            trackNo: t.trackNo || 0,
+                          }
+
+                          return (
+                            <div key={t.id} className="trackRowWrap">
+                              <button
+                                className="trackRow"
+                                onClick={() =>
+                                  playTrack(track, {
+                                    context: contextTracks,
+                                    index: idx,
+                                  })
+                                }
+                              >
+                                <div className="trackLeft">
+                                  <div className="trackIdx">{t.trackNo || idx + 1}</div>
+                                  <div className="trackTitle">{t.title}</div>
+                                </div>
+
+                                <div className="trackRight">{fmtTime(t.duration)}</div>
+                              </button>
+
+                              <div className="trackActions">
+                                <button
+                                  className="ghostBtn"
+                                  onClick={() => playNextNow(track)}
+                                  title="Play next"
+                                >
+                                  Next
+                                </button>
+                                <button
+                                  className="ghostBtn"
+                                  onClick={() => addToQueue(track)}
+                                  title="Add to queue"
+                                >
+                                  Queue
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="main">
-        {view.kind === "home" && (
-          <>
-            <div className="sectionTitle">Albums</div>
-
-            {loadingAlbums && <div className="muted">Loading…</div>}
-            {!loadingAlbums && albumsError && <div className="muted">Error: {albumsError}</div>}
-
-            {!loadingAlbums && !albumsError && (
-              <div className="grid">
-                {albumGrid.map((a) => (
-                  <button
-                    key={a.albumId}
-                    className="card"
-                    onClick={() => openAlbum(a.artist, a.album)}
-                  >
-                    <Cover artist={a.artist} album={a.album} coverUrl={a.coverUrl} />
-                    <div className="cardTitle">{a.album}</div>
-                    <div className="cardSub">{a.artist}</div>
-                  </button>
-                ))}
-              </div>
+              </>
             )}
-          </>
-        )}
+          </main>
 
-        {view.kind === "album" && (
-          <>
-            <div className="albumTop">
-              <button className="backBtn" onClick={goHome}>← Back</button>
-
-              {albumLoading && <div className="muted">Loading album…</div>}
-
-              {!albumLoading && albumError && (
-                <div className="muted">Album error: {albumError}</div>
-              )}
-
-              {!albumLoading && albumData && (
-                <div className="albumHeader">
-                  <div className="albumCoverLg">
-                    <Cover
-                      artist={albumData.artist}
-                      album={albumData.album}
-                      coverUrl={albumData.coverUrl}
-                      className="coverLg"
-                    />
-                  </div>
-
-                  <div className="albumMeta">
-                    <div className="albumName">{albumData.album}</div>
-                    <div className="albumArtist">{albumData.artist}</div>
-                    <div className="albumCounts">
-                      {albumData.tracks?.length || 0} songs
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!albumLoading && albumData && (
-              <div className="trackList">
-                {(albumData.tracks || []).map((t, idx) => (
-                  <button
-                    key={t.id}
-                    className="trackRow"
-                    onClick={() =>
-                      playTrack({
-                        id: t.id,
-                        title: t.title,
-                        artist: albumData.artist, // album artist for display
-                        album: albumData.album,
-                        duration: t.duration,
-                      })
-                    }
-                  >
-                    <div className="trackLeft">
-                      <div className="trackIdx">{t.trackNo || idx + 1}</div>
-                      <div className="trackTitle">{t.title}</div>
-                    </div>
-                    <div className="trackRight">{fmtTime(t.duration)}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </main>
-
-      {/* Player bar */}
-      <footer className="player">
-        <div className="playerLeft">
-          {currentTrack ? (
-            <>
-              <div className="nowTitle">{currentTrack.title}</div>
-              <div className="nowSub">
-                {currentTrack.artist} • {currentTrack.album}
-              </div>
-            </>
-          ) : (
-            <div className="muted">Pick a song…</div>
+          {queueOpen && (
+            <aside className="sidebar">
+              <QueuePanel />
+            </aside>
           )}
         </div>
 
-        <div className="playerMid">
-          <button className="playBtn" onClick={togglePlay} disabled={!currentTrack}>
-            {isPlaying ? "Pause" : "Play"}
-          </button>
-        </div>
-
-        <div className="playerRight">
-          <div className="time">{fmtTime(progress)}</div>
-          <input
-            className="seek"
-            type="range"
-            min="0"
-            max={Math.max(0, duration || 0)}
-            value={Math.min(progress, duration || 0)}
-            onChange={(e) => seekTo(Number(e.target.value))}
-            disabled={!currentTrack}
-          />
-          <div className="time">{fmtTime(duration)}</div>
-        </div>
-      </footer>
+        <PlaybackBar />
+      </div>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <PlayerProvider>
+      <SyncifyApp />
+    </PlayerProvider>
   )
 }
