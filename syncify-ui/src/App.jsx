@@ -198,16 +198,14 @@ function SyncifyApp() {
         style={
           backgroundCover
             ? {
-                backgroundImage: `
-                  linear-gradient(rgba(9,13,20,0.72), rgba(9,13,20,0.94)),
-                  url(${backgroundCover})
-                `,
+                backgroundImage: `linear-gradient(rgba(9,13,20,0.72), rgba(9,13,20,0.94)), url("${backgroundCover}")`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
             : undefined
         }
       />
+
       <div className="app">
         <header className="topbar">
           <div className="brand" onClick={goHome} style={{ cursor: "pointer" }}>

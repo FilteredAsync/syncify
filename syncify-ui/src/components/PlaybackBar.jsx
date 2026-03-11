@@ -32,7 +32,7 @@ export default function PlaybackBar() {
     <footer className="playbackBar">
       <div className="pbNow">
         {current?.coverUrl && (
-            <img className="pbCover" src={`${API}${current.coverUrl}`} alt="" />
+            <img className="pbCover" src={`${API}${current.coverUrl}`} alt={`${current?.album || "album"} cover`} />
         )}
         {current ? (
           <>
