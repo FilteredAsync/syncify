@@ -193,18 +193,7 @@ function SyncifyApp() {
 
   return (
     <div className="appShell">
-      <div
-        className="appBackdrop"
-        style={
-          backgroundCover
-            ? {
-                backgroundImage: `linear-gradient(rgba(9,13,20,0.72), rgba(9,13,20,0.94)), url("${backgroundCover}")`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
-      />
+  
 
       <div className="app">
         <header className="topbar">
